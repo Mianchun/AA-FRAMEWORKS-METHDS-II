@@ -1,0 +1,268 @@
+---
+title: "baby_textmining"
+author: "MianchunLu"
+date: "March 6, 2019"
+output: html_document
+---
+
+```{r}
+baby=read.csv("D:/personal/columbia university/AA method 2/assignment/baby_reviews.csv",stringsAsFactors = F)
+
+str(baby)
+
+```
+
+What is the average review rating?
+```{r}
+mean(baby$review_rating)
+```
+
+nchar() is a handy function for counting the number of characters in text. What is the average number of characters in a review?
+```{r}
+mean(nchar(baby$review))
+```
+
+Examine the relationship between review length (measured by number of characters) and rating. Greater the length of the review, better the rating.
+```{r}
+cor(nchar(baby$review),baby$review_rating)
+```
+
+The stringr library has a number of handy text search functions capable of both literal search and pattern matching. The sample code that follows specifies a pattern to identify a word and str_count to count the number of such words in a set of text.
+Using the above code, find the median number of words in a review?
+```{r}
+library(stringr)
+str_count(string = 'Hmm, how many words are in this sentence?',pattern = '\\S+')
+```
+```{r}
+median(str_count(string=baby$review, pattern = '\\S+'))
+```
+
+How many words are in the longest review?
+```{r}
+summary(str_count(string=baby$review, pattern = '\\S+'))
+```
+
+Next, let us examine which words are used most frequently in the review. The qdap package comes with a handy function freq_terms that counts frequency of each word in the reviews. The following code will list the top 10 words (if your data is in 'baby').
+```{r}
+library(qdap)
+freq_terms(text.var = baby$review,top = 10)
+```
+
+Now, let us construct a Top 10 list after excluding stop words. To do this include the following argument in the above freq_words function: stopwords=Top200Words.
+```{r}
+freq_terms(text.var = baby$review,top = 10, stopwords=Top200Words)
+```
+
+Let us use the dplyr and tidytext packages to explore the words used in the review. Use the unnest_tokens function from tidytext to tokenize the reviews and the following dplyr functions to organize the data: select, group_by, ungroup and count.
+What is the total number of words in all the reviews?
+```{r}
+library(dplyr)
+library(tidytext)
+baby %>%
+  select(id,review)%>%
+  group_by(id)%>%
+  unnest_tokens(output = word,input=review)%>%
+  ungroup()%>%
+  count()
+```
+
+Now, let us explore valence of the words used in reviews. Use the 'bing' dictionary to classify words in reviews into positive and negative. The bing dictionary of words can be accessed using tidytext::get_sentiments('bing'). 
+What is the total number of positive words are in all the reviews?
+```{r}
+baby %>%
+  group_by(id)%>%
+  unnest_tokens(output = word,input=review)%>%
+  inner_join(get_sentiments('bing'))%>%
+  group_by(sentiment)%>%
+  count()
+```
+
+Among all the review words categorized as either positive or negative (using the 'bing' dictionary), what proportion are positive?
+```{r}
+baby %>%
+  group_by(id)%>%
+  unnest_tokens(output = word,input=review)%>%
+  inner_join(get_sentiments('bing'))%>%
+  group_by(sentiment)%>%
+  summarize(n = n())%>%
+  mutate(proportion = n/sum(n))
+```
+
+Now, let us examine the proportion of positive words in reviews for each review rating. Of the five possible review ratings, which has the highest proportion of positive words?
+```{r}
+baby %>%
+  group_by(id)%>%
+  unnest_tokens(output = word,input=review)%>%
+  inner_join(get_sentiments('bing'))%>%
+  group_by(review_rating,sentiment)%>%
+  summarize(n = n())%>%
+  mutate(proportion = n/sum(n))
+```
+
+Next, let us examine the emotions expressed in the reviews using the 'nrc' dictionary, which can be accessed by running, tidytext::get_sentiments('nrc'). How many words reflect surprise?
+```{r}
+baby %>%
+  group_by(id)%>%
+  unnest_tokens(output = word,input=review)%>%
+  inner_join(get_sentiments('nrc'))%>%
+  group_by(sentiment)%>%
+  count()
+```
+
+The 'afinn' dictionary scores the sentiment of words. Use this dictionary to determine the sentiment of each review. The 'afinn' dictionary can be accessed by running tidytext::get_sentiments('afinn'). What is the minimum sentiment score?
+```{r}
+baby %>%
+  group_by(id)%>%
+  unnest_tokens(output = word,input=review)%>%
+  inner_join(get_sentiments('afinn'))%>%
+  summarise(senti=mean(score))%>%
+  ungroup()%>%
+  summarise(min(senti))
+
+
+```
+
+Which of the following review ids have the lowest sentiment score? (If you are curious, you may also want to take a look at the review to understand the reason for the low sentiment score)
+```{r}
+baby %>%
+  group_by(id)%>%
+  unnest_tokens(output = word,input=review)%>%
+  inner_join(get_sentiments('afinn'))%>%
+  filter(id==91|id==146|id==238|id==1432|id==2598)%>%
+  summarise(reviewSentiment = mean(score))
+
+```
+
+```{r}
+baby%>%select(id,review)%>%filter(id==91)
+```
+
+```{r}
+baby$review[238]
+```
+
+What is the average sentiment score (based on the 'afinn' dictionary)?
+```{r}
+baby %>%
+  group_by(id)%>%
+  unnest_tokens(output = word,input=review)%>%
+  inner_join(get_sentiments('afinn'))%>%
+  summarise(senti=mean(score))%>%
+  ungroup()%>%
+  summarise(mean(senti))
+```
+
+How many terms does the document term matrix contain?
+```{r}
+library(tm)
+corpus = Corpus(VectorSource(baby$review))
+corpus = tm_map(corpus,FUN = content_transformer(tolower))
+corpus = tm_map(corpus,FUN = removePunctuation)
+corpus = tm_map(corpus,FUN = removeWords,c(stopwords('english')))
+corpus = tm_map(corpus,FUN = stripWhitespace)
+corpus = tm_map(corpus,FUN = stemDocument)
+
+dtm = DocumentTermMatrix(corpus)
+dtm
+
+```
+
+```{r}
+dict = findFreqTerms(DocumentTermMatrix(Corpus(VectorSource(baby$review))),lowfreq = 0)
+dict_corpus = Corpus(VectorSource(dict))
+```
+
+Inspect document 100 of the document term matrix. How many times does 'amazon' appear in this document?
+```{r}
+inspect(dtm[100,'amazon'])
+```
+
+Now, let us reduce the number of terms to a more reasonable number by only keeping terms that appear in at least 10% of documents. Save the result as 'xdtm'. How many terms remain after removing sparse terms?
+```{r}
+xdtm = removeSparseTerms(dtm,sparse = 0.90)
+xdtm
+```
+
+Transform the document term matrix, xdtm created in the previous question into a data frame. Use stemCompletion() to complete stemmed words by selecting the most prevalent match. In the resulting data frame, which term appears most frequently?
+```{r}
+xdtm = as.data.frame(as.matrix(xdtm))
+colnames(xdtm) = stemCompletion(x = colnames(xdtm),dictionary = dict_corpus,type='prevalent')
+colnames(xdtm) = make.names(colnames(xdtm))
+sort(colSums(xdtm),decreasing = T)
+```
+
+Attach the column containing the review rating to the dataframe created in the previous question. Which is the third (3rd) most frequently occurring word among reviews with a rating of 5?
+```{r}
+baby_data = cbind(review_rating = baby$review_rating,xdtm)
+score5=baby_data%>%
+  filter(review_rating==5)
+sort(colMeans(score5),decreasing = T)
+
+```
+
+Now, let us use data on word frequencies to predict review rating. Split the dataset containing review rating and term frequencies into train and test samples. Use sample() to create a train sample with 70% of the data and a test sample with the remaining 30%. Use a seed of 1031. For a dataset called, baby_data, the following code will create the train and test samples.
+How many rows are in the test sample?
+```{r}
+set.seed(1031)
+split = sample(1:nrow(baby_data),size = 0.7*nrow(baby_data))
+train = baby_data[split,]
+test = baby_data[-split,]
+nrow(test)
+```
+
+Use a CART model to predict review_rating using all other variables, i.e., term frequencies. For the CART model, use rpart().
+Based on results of the CART model, reviews that contain the term 'love' are rated higher than those that don't contain the term 'love'.
+```{r}
+library(rpart); library(rpart.plot)
+tree = rpart(review_rating~.,train)
+rpart.plot(tree)
+```
+
+Based on results of the CART model, reviews that contain the term 'easier' are rated lower than those that don't contain the term 'easier'.
+```{r}
+
+```
+
+Based on results of the CART model, reviews that contain the term 'perfect' are rated lower than those that don't contain the term 'perfect'.
+```{r}
+
+sort(colMeans(baby_data),decreasing = T)
+```
+
+Use a linear regression to predict review_rating using all other variables, i.e., term frequencies. Examine the results. Locate the most frequently occurring term in review in the regression results. Is this term predictive of review_rating?
+```{r}
+reg = lm(review_rating~.,train)
+summary(reg)
+```
+
+What is the rmse of the CART model on the test set?
+```{r}
+pred_tree = predict(tree,newdata=test)
+rmse_tree = sqrt(mean((pred_tree - test$review_rating)^2)); rmse_tree
+```
+
+What is the rmse of the linear regression model on the test set?
+```{r}
+pred_reg = predict(reg, newdata=test)
+rmse_reg = sqrt(mean((pred_reg-test$review_rating)^2)); rmse_reg
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+```
+
